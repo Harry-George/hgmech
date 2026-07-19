@@ -27,7 +27,7 @@ use game::dice::XorShiftDice;
 #[cfg(target_arch = "wasm32")]
 use game::state::GameState;
 #[cfg(target_arch = "wasm32")]
-use matchbox_socket::{PeerState, WebRtcSocket};
+use matchbox_socket::{PeerState, RtcIceServerConfig, WebRtcSocket, WebRtcSocketBuilder};
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen_futures::spawn_local;
 
@@ -37,11 +37,34 @@ const CHANNEL_ID: usize = 0;
 
 /// Base URL of the signaling server's HTTP API (room creation / lookup).
 ///
-/// Points at a locally-running `multiplayer_server` by default; change these two
-/// constants (or serve the server behind the same origin) for a deployment.
-pub const SIGNAL_HTTP: &str = "http://127.0.0.1:3536";
-/// Base URL of the signaling server's WebSocket endpoint.
-pub const SIGNAL_WS: &str = "ws://127.0.0.1:3536";
+/// Defaults to a locally-running `multiplayer_server`, but is overridden at
+/// **build time** by the `BT_SIGNAL_HTTP` environment variable so the same
+/// source can target a deployed server, e.g.
+/// `BT_SIGNAL_HTTP=https://signal.example.com trunk build --release`.
+/// Use `https://` in production — a page served over HTTPS may not call `http`.
+pub const SIGNAL_HTTP: &str = match option_env!("BT_SIGNAL_HTTP") {
+    Some(v) => v,
+    None => "http://127.0.0.1:3536",
+};
+/// Base URL of the signaling server's WebSocket endpoint. Overridden at build
+/// time by `BT_SIGNAL_WS`; use `wss://` in production (an HTTPS page may not
+/// open a `ws://` socket).
+pub const SIGNAL_WS: &str = match option_env!("BT_SIGNAL_WS") {
+    Some(v) => v,
+    None => "ws://127.0.0.1:3536",
+};
+
+/// Optional TURN relay for WebRTC NAT traversal, all set at build time. STUN
+/// (built in) covers most home networks; a TURN server is only needed for peers
+/// behind symmetric NAT or strict firewalls. Set `BT_TURN_URL` (e.g.
+/// `turn:turn.example.com:3478`) plus `BT_TURN_USER` / `BT_TURN_PASS` if the
+/// relay needs credentials.
+#[cfg(target_arch = "wasm32")]
+const TURN_URL: Option<&str> = option_env!("BT_TURN_URL");
+#[cfg(target_arch = "wasm32")]
+const TURN_USER: Option<&str> = option_env!("BT_TURN_USER");
+#[cfg(target_arch = "wasm32")]
+const TURN_PASS: Option<&str> = option_env!("BT_TURN_PASS");
 
 /// How the local player is participating in the current game.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -160,10 +183,31 @@ impl Net {
     }
 
     /// Open a reliable WebRTC socket to `room` and spawn its message loop.
+    ///
+    /// Uses the default STUN servers plus any build-time TURN relay so peers can
+    /// traverse NAT; falls back to the same single reliable data channel that
+    /// [`WebRtcSocket::new_reliable`] would create.
     #[cfg(target_arch = "wasm32")]
     fn open_socket(&self, room: &str) {
         let url = format!("{SIGNAL_WS}/{room}");
-        let (socket, loop_fut) = WebRtcSocket::new_reliable(url);
+
+        let mut urls = vec![
+            "stun:stun.l.google.com:19302".to_string(),
+            "stun:stun1.l.google.com:19302".to_string(),
+        ];
+        if let Some(turn) = TURN_URL {
+            urls.push(turn.to_string());
+        }
+        let ice = RtcIceServerConfig {
+            urls,
+            username: TURN_USER.map(String::from),
+            credential: TURN_PASS.map(String::from),
+        };
+
+        let (socket, loop_fut) = WebRtcSocketBuilder::new(url)
+            .ice_server(ice)
+            .add_reliable_channel()
+            .build();
         self.socket.set_value(Some(socket));
         // The loop future drives the underlying signaling/WebRTC machinery; it
         // must be polled for any message to flow. It resolves when the socket

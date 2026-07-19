@@ -1,0 +1,8 @@
+# Keep the build context small and the image cache stable.
+target/
+dist/
+node_modules/
+.git/
+.github/
+deploy/
+*.md

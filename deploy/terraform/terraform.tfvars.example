@@ -1,0 +1,19 @@
+# Copy to terraform.tfvars and edit. Only `domain_name` is required.
+
+# A domain you own with an existing PUBLIC Route 53 hosted zone.
+domain_name = "example.com"
+
+# --- Optional overrides (defaults shown) ---
+
+# region              = "eu-west-2"
+# project             = "bt-multiplayer"
+# signaling_subdomain = "signal"        # -> wss://signal.example.com
+# image_tag           = "latest"
+# desired_count       = 1
+# task_cpu            = "256"
+# task_memory         = "512"
+
+# Static app hosting on S3 + CloudFront (the WASM bundle can also stay on
+# GitHub Pages, in which case set this to false).
+# deploy_static_app = true
+# app_subdomain     = "play"            # -> https://play.example.com
