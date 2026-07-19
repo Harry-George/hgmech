@@ -94,7 +94,7 @@ jobs:
       # reference its assets under that subpath. `--public-url /<repo>/` rewrites
       # the absolute asset URLs in index.html accordingly.
       - name: Build release bundle
-        run: trunk build --release --public-url "/${{ github.event.repository.name }}/"
+        run: trunk build --release --minify --public-url "/${{ github.event.repository.name }}/"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5
