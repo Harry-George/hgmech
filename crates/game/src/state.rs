@@ -11,8 +11,9 @@
 
 use crate::combat::{self, CriticalHit, AttackResult, HEAT_MAX, HEAT_SHUTDOWN_THRESHOLD};
 use crate::dice::Dice;
+use crate::line_of_sight::line_of_sight;
 use crate::scenario::{BOARD_H, BOARD_W};
-use crate::terrain::{cover_at, TerrainFeature};
+use crate::terrain::TerrainFeature;
 use crate::unit::UnitState;
 
 /// Depth of a home-edge deployment zone, in inches (rules.md §3: on-board start
@@ -546,7 +547,30 @@ impl<D: Dice> GameState<D> {
             let (tx, ty) = target.position;
             ((tx - ax).powi(2) + (ty - ay).powi(2)).sqrt()
         };
-        let cover = cover_at(target.position, &self.terrain);
+
+        // Step 1 — Line of Sight (rules.md §5). Terrain between the two units may
+        // block the shot outright, or grant the target cover (+1 to hit).
+        let sighting = line_of_sight(attacker.position, target.position, &self.terrain);
+        if sighting.blocked {
+            let range = combat::range_of(distance);
+            self.log.push(format!(
+                "{} → {}: no line of sight.",
+                attacker.card.name, target.card.name
+            ));
+            return Some(AttackResult {
+                roll: 0,
+                target_number: 0,
+                hit: false,
+                range,
+                damage: 0,
+                in_range: range != combat::Range::OutOfRange,
+                has_los: false,
+                overheat_bonus: 0,
+                overheat_heat: 0,
+                crit: None,
+            });
+        }
+        let cover = sighting.cover;
 
         let mut result = combat::resolve_attack(
             &attacker,

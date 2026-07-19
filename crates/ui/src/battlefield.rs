@@ -27,6 +27,8 @@ pub fn Battlefield() -> impl IntoView {
             let class = match t.kind {
                 TerrainKind::Woods => "terrain terrain--woods",
                 TerrainKind::Cover => "terrain terrain--cover",
+                TerrainKind::Building => "terrain terrain--building",
+                TerrainKind::Water => "terrain terrain--water",
                 TerrainKind::Open => "terrain",
             };
             let style = format!(

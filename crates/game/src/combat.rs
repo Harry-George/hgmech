@@ -124,15 +124,111 @@ pub fn terrain_modifier(cover: Cover) -> i32 {
     }
 }
 
-/// The 2D6 number the attacker must meet or beat.
+/// One labelled term of the to-hit sum, for showing the player *why* a shot is
+/// as hard as it is (see [`to_hit_components`]).
+#[derive(Clone, PartialEq, Eq, Debug)]
+pub struct ToHitComponent {
+    pub label: String,
+    pub value: i32,
+}
+
+/// The itemised to-hit number: every contributing modifier with a human label,
+/// in the order the rules list them (rules.md §5 Step 4). Summing the `value`s
+/// gives [`to_hit_number`]; the always-present terms (skill, range, both
+/// movement mods) are kept even when zero so the breakdown reads in full, while
+/// the situational terms (cover, heat, fire control) appear only when non-zero.
+pub fn to_hit_components(
+    attacker: &UnitState,
+    target: &UnitState,
+    range: Range,
+    cover: Cover,
+) -> Vec<ToHitComponent> {
+    let mut c = Vec::new();
+    let mut push = |label: &str, value: i32| c.push(ToHitComponent { label: label.into(), value });
+
+    push("Pilot skill", attacker.card.pilot_skill);
+    push(&format!("{} range", range.as_str()), range_modifier(range));
+
+    let target_label = if target.is_immobile() {
+        "Target immobile/shutdown"
+    } else {
+        match target.mode {
+            MovementMode::Stationary => "Target stood still",
+            MovementMode::Ground => "Target movement (TMM)",
+            MovementMode::Jump => "Target jumped (TMM +1)",
+        }
+    };
+    push(target_label, target_movement_modifier(target));
+
+    let attacker_label = match attacker.mode {
+        MovementMode::Stationary => "Attacker stood still",
+        MovementMode::Ground => "Attacker moved",
+        MovementMode::Jump => "Attacker jumped",
+    };
+    push(attacker_label, attacker_move_modifier(attacker.mode));
+
+    let cover_mod = terrain_modifier(cover);
+    if cover_mod != 0 {
+        let label = match cover {
+            Cover::Woods => "Woods",
+            Cover::Partial => "Partial cover",
+            Cover::None => "Cover",
+        };
+        push(label, cover_mod);
+    }
+    if attacker.heat > 0 {
+        push(&format!("Attacker heat {}", attacker.heat), attacker.heat as i32);
+    }
+    if attacker.fire_control_hits > 0 {
+        push(
+            &format!("Fire-control hits ×{}", attacker.fire_control_hits),
+            2 * attacker.fire_control_hits as i32,
+        );
+    }
+    c
+}
+
+/// The 2D6 number the attacker must meet or beat — the sum of every term in
+/// [`to_hit_components`].
 pub fn to_hit_number(attacker: &UnitState, target: &UnitState, range: Range, cover: Cover) -> i32 {
-    attacker.card.pilot_skill
-        + target_movement_modifier(target)
-        + range_modifier(range)
-        + attacker_move_modifier(attacker.mode)
-        + terrain_modifier(cover)
-        + attacker.heat as i32
-        + 2 * attacker.fire_control_hits as i32
+    to_hit_components(attacker, target, range, cover)
+        .iter()
+        .map(|c| c.value)
+        .sum()
+}
+
+/// Probability that a fair 2D6 roll meets or beats `target_number` (0.0–1.0).
+/// Used to preview a shot before committing to it.
+pub fn hit_probability(target_number: i32) -> f64 {
+    // Ways to roll each 2D6 sum 2..=12 (out of 36 equally-likely outcomes).
+    const WAYS: [i32; 11] = [1, 2, 3, 4, 5, 6, 5, 4, 3, 2, 1];
+    if target_number <= 2 {
+        return 1.0;
+    }
+    if target_number > 12 {
+        return 0.0;
+    }
+    let favorable: i32 = (target_number..=12).map(|s| WAYS[(s - 2) as usize]).sum();
+    favorable as f64 / 36.0
+}
+
+/// How many overheat points an attack would actually spend: the attacker's OV,
+/// capped by the room left on the heat scale, and only when the bonus applies at
+/// this range (Short/Medium, or Long too with `OVL`). Returns 0 if `requested`
+/// is false. Shared by [`resolve_attack`] and attack previews.
+pub fn overheat_points(attacker: &UnitState, range: Range, requested: bool) -> u32 {
+    if !requested {
+        return 0;
+    }
+    let room = HEAT_MAX.saturating_sub(attacker.heat);
+    let usable = attacker.card.overheat.min(room);
+    let applies = matches!(range, Range::Short | Range::Medium)
+        || (range == Range::Long && attacker.card.ovl);
+    if applies {
+        usable
+    } else {
+        0
+    }
 }
 
 /// Damage dealt at a given range bracket.
@@ -231,6 +327,10 @@ pub struct AttackResult {
     pub damage: u32,
     /// False if the target was out of range (no roll was made).
     pub in_range: bool,
+    /// False if terrain blocked the line of sight (no roll was made). Line of
+    /// sight is a map-level concern resolved by [`crate::state`]; a bare
+    /// [`resolve_attack`] always reports `true`.
+    pub has_los: bool,
     /// Bonus damage delivered by overheating (included in `damage`, hits only).
     pub overheat_bonus: u32,
     /// Overheat points that incur heat at the End Phase (charged hit or miss).
@@ -263,6 +363,7 @@ pub fn resolve_attack(
             range,
             damage: 0,
             in_range: false,
+            has_los: true,
             overheat_bonus: 0,
             overheat_heat: 0,
             crit: None,
@@ -303,6 +404,7 @@ pub fn resolve_attack(
         range,
         damage,
         in_range: true,
+        has_los: true,
         overheat_bonus,
         overheat_heat: overheat_points,
         crit: None,

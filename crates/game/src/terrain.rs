@@ -11,10 +11,33 @@ use serde::{Deserialize, Serialize};
 pub enum TerrainKind {
     /// Open ground — no effect.
     Open,
-    /// Light cover (rubble, low walls).
+    /// Light cover (rubble, low walls). Movement-only terrain: it grants no
+    /// line-of-sight cover under the rules (see [`crate::line_of_sight`]).
     Cover,
-    /// Woods — heavier concealment.
+    /// Woods — non-solid concealment. Blocks line of sight only when the line
+    /// passes through ≥ 6" of it; shorter stretches add +1 to hit.
     Woods,
+    /// Solid terrain (a building or hill) that blocks line of sight when it
+    /// hides enough of the target.
+    Building,
+    /// Water — a 'Mech standing in it gains partial cover.
+    Water,
+}
+
+impl TerrainKind {
+    /// Solid terrain (buildings, hills) can block line of sight, unlike woods
+    /// and water (rules.md §5 Step 1).
+    pub fn is_solid(&self) -> bool {
+        matches!(self, TerrainKind::Building)
+    }
+
+    pub fn is_woods(&self) -> bool {
+        matches!(self, TerrainKind::Woods)
+    }
+
+    pub fn is_water(&self) -> bool {
+        matches!(self, TerrainKind::Water)
+    }
 }
 
 /// The cover a unit currently benefits from, ordered weakest to strongest.
@@ -54,10 +77,11 @@ impl TerrainFeature {
         px >= self.x && px <= self.x + self.w && py >= self.y && py <= self.y + self.h
     }
 
+    /// This is the cover the unit gets by standing "in" the said terrain feature.
     pub fn cover(&self) -> Cover {
         match self.kind {
-            TerrainKind::Open => Cover::None,
-            TerrainKind::Cover => Cover::Partial,
+            TerrainKind::Open | TerrainKind::Building => Cover::None,
+            TerrainKind::Cover | TerrainKind::Water => Cover::Partial,
             TerrainKind::Woods => Cover::Woods,
         }
     }

@@ -91,13 +91,19 @@ TESTED here: range brackets & modifiers, the full to-hit summation, armor-then-
 structure damage, the natural-12 crit, structure-damage crit, the crit table and
 crit effects (combat_modifiers.rs, damage_and_crits.rs).
 
+Step 1 Line of Sight is now MODELED and tested in line_of_sight.rs (solid
+terrain <1/3 visible blocks; solid terrain 1/3-2/3 hidden gives partial cover;
+woods block at >=6" of traversal and otherwise add +1; a 'Mech in water has
+partial cover; base-to-base always have LOS; intervening units never block).
+See crates/game/src/los.rs. Two documented simplifications remain:
+  [DIVERGES] the 1/3 and 2/3 "fraction visible" thresholds are estimated by
+    sampling the target's silhouette against axis-aligned solid zones, not by
+    exact visible-area geometry.
+  [NOT-MODELED] partial cover (+1) and intervening/occupied woods (+1) do not
+    stack: line_of_sight reports the stronger single source, so the combined
+    +2 the Quick Reference allows is capped at +1.
+
 NOT tested:
-- Step 1 Line of Sight — all of it (solid terrain <1/3 visible blocks; woods
-  block at >=6" and otherwise add +1; base-to-base always have LOS; intervening
-  units never block; partial cover between 1/3 and 2/3; water gives partial
-  cover): [NOT-MODELED] there is no LOS geometry. Note: the +1 cover MODIFIER is
-  tested (terrain_modifier), but cover is read from a rectangular zone the target
-  stands in, not computed from a line of sight.
 - Step 2 Firing Arc ("more than half the base outside the arc → no attack"):
   [NOT-MODELED] no facing/arc geometry.
 - Base-to-base units cannot make weapon attacks (only physical): [NOT-MODELED]

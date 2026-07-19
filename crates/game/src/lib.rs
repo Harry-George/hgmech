@@ -14,6 +14,7 @@ pub mod catalog;
 mod catalog_csv;
 pub mod combat;
 pub mod dice;
+pub mod line_of_sight;
 pub mod scenario;
 pub mod state;
 pub mod terrain;
