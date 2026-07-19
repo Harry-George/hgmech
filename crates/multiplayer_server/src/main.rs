@@ -34,6 +34,7 @@ fn setup_logging() {
         .init();
 }
 
+// #[allow(clippy::]
 #[tokio::main]
 async fn main() {
     setup_logging();
@@ -55,6 +56,7 @@ async fn main() {
     let server = SignalingServerBuilder::new(args.host, MatchmakingDemoTopology, state.clone())
         .on_connection_request({
             let mut state = state.clone();
+            #[allow(clippy::result_large_err)]
             move |connection| {
                 let room_id = RoomId(connection.path.clone().unwrap_or_default());
                 if !state.room_exists(&room_id) {
