@@ -44,7 +44,7 @@ jobs:
         run: cargo clippy --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings
 
       - name: Run all tests
-        run: cargo nextest run
+        run: cargo nextest run --workspace
 
   # Build the production bundle and upload it as a Pages artifact. Only on the
   # default branch, and only once verification has passed.
