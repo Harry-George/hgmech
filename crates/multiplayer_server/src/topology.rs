@@ -117,10 +117,7 @@ impl SignalingTopology<NoCallbacks, ServerState> for MatchmakingDemoTopology {
 #[cfg(test)]
 mod tests {
     use super::MatchmakingDemoTopology;
-    use crate::{
-        ServerState,
-        state::{RequestedRoom, RoomId},
-    };
+    use crate::state::{RequestedRoom, RoomId, ServerState};
     use futures::{SinkExt, StreamExt, pin_mut};
     use matchbox_protocol::{JsonPeerEvent, PeerId};
     use matchbox_signaling::{SignalingServer, SignalingServerBuilder};

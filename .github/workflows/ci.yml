@@ -30,6 +30,11 @@ jobs:
           targets: wasm32-unknown-unknown
           components: clippy
 
+      - name: Install nextest
+        uses: taiki-e/install-action@v2
+        with:
+          tool: nextest # installs the `cargo-nextest` binary
+
       - name: Cache Rust
         uses: Swatinem/rust-cache@v2
         with:
@@ -38,8 +43,8 @@ jobs:
       - name: Clippy (warnings denied)
         run: cargo clippy --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings
 
-      - name: Test game logic
-        run: cargo test -p game
+      - name: Run all tests
+        run: cargo nextest run
 
   # Build the production bundle and upload it as a Pages artifact. Only on the
   # default branch, and only once verification has passed.
