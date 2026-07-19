@@ -5,6 +5,7 @@
 //! [`ScriptedDice`]. Neither implementation touches the browser; the UI seeds
 //! the PRNG from `Math::random()` at start-up.
 
+use serde::{Deserialize, Serialize};
 use std::collections::VecDeque;
 
 /// Anything that can produce a 2D6 roll (a value in `2..=12`).
@@ -14,7 +15,10 @@ pub trait Dice {
 
 /// A tiny, dependency-free xorshift64 PRNG. Deterministic for a given seed,
 /// which keeps the crate free of `rand`/`getrandom` and their wasm quirks.
-#[derive(Clone, Debug)]
+///
+/// Serializable so the whole `GameState` (including its PRNG position) can be
+/// snapshotted and shipped to a peer for multiplayer sync.
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct XorShiftDice {
     state: u64,
 }

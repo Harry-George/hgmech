@@ -12,6 +12,7 @@ use web_sys::PointerEvent;
 
 use game::state::Phase;
 
+use super::net::use_net;
 use super::{use_game, use_overheat, use_selected_card, SCALE};
 
 /// Convert a viewport pixel coordinate to board inches using the live position
@@ -30,6 +31,7 @@ pub fn UnitView(id: usize) -> impl IntoView {
     let game = use_game();
     let overheat = use_overheat();
     let selected_card = use_selected_card();
+    let net = use_net();
     let is_dragging = RwSignal::new(false);
 
     // Immutable identity/stat fields — read once.
@@ -53,7 +55,9 @@ pub fn UnitView(id: usize) -> impl IntoView {
 
     let on_pointerdown = move |e: PointerEvent| {
         let can_drag = game.with(|g| {
-            matches!(g.phase, Phase::Movement | Phase::Deployment) && g.is_actionable(id)
+            matches!(g.phase, Phase::Movement | Phase::Deployment)
+                && g.is_actionable(id)
+                && net.my_turn(g.current_player())
         });
         if !can_drag {
             // Leave the event alone so the Attack-phase tap (on:click) and any
@@ -113,6 +117,9 @@ pub fn UnitView(id: usize) -> impl IntoView {
                 }
             }
         });
+        // The drag committed a placement (Deployment) or path segment (Movement);
+        // ship the new state to the peer.
+        net.broadcast(game);
     };
     let on_pointerup = move |_e: PointerEvent| end_drag();
     let on_pointercancel = move |_e: PointerEvent| end_drag();
@@ -121,6 +128,10 @@ pub fn UnitView(id: usize) -> impl IntoView {
     let on_click = move |_| {
         game.update(|g| {
             if g.phase != Phase::Attack {
+                return;
+            }
+            // Online, block interaction unless it is this client's turn.
+            if !net.my_turn(g.current_player()) {
                 return;
             }
             if g.is_actionable(id) {
@@ -136,12 +147,15 @@ pub fn UnitView(id: usize) -> impl IntoView {
                 }
             }
         });
+        // Selecting an attacker or resolving a shot both change shared state.
+        net.broadcast(game);
     };
 
     let on_undo = move |_| {
         // Go through the engine so a full undo releases the activation lock and
         // lets the player pick a different unit to move.
         game.update(|g| g.undo_unit_move(id));
+        net.broadcast(game);
     };
 
     // Reactive views ----------------------------------------------------
@@ -190,6 +204,7 @@ pub fn UnitView(id: usize) -> impl IntoView {
         game.with(|g| {
             g.phase == Phase::Movement
                 && g.is_actionable(id)
+                && net.my_turn(g.current_player())
                 && g.unit(id).map(|u| !u.lines.is_empty()).unwrap_or(false)
         })
     };

@@ -10,6 +10,7 @@ use axum::{
 };
 use clap::Parser;
 use matchbox_signaling::SignalingServerBuilder;
+use tower_http::cors::CorsLayer;
 use tracing::info;
 use tracing_subscriber::prelude::*;
 
@@ -77,7 +78,12 @@ pub async fn run() {
                     Router::new()
                         .route("/rooms", get(list_rooms_handler).post(create_room_handler))
                         .route("/rooms/{room_id}", get(check_room_handler))
-                        .with_state(state),
+                        .with_state(state)
+                        // The browser client creates/looks up rooms cross-origin
+                        // (Trunk dev server on a different port), so these routes
+                        // need CORS. The builder's `.cors()` only wraps routes
+                        // registered before it, which these are not — apply it here.
+                        .layer(CorsLayer::permissive()),
                 )
             }
         })

@@ -15,6 +15,8 @@ pub mod app;
 pub mod battlefield;
 pub mod force_select;
 pub mod hud;
+pub mod lobby;
+pub mod net;
 pub mod overlays;
 pub mod unit_card;
 pub mod unit_view;
@@ -30,6 +32,10 @@ pub const SCALE: f64 = 12.0;
 /// Which top-level screen the app is showing.
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub enum ScreenKind {
+    /// Opening chooser: Host / Join / Local.
+    ModeSelect,
+    /// Online waiting room (host shows its room id; joiner enters one).
+    Lobby,
     /// Pre-game force builder (both players pick units).
     ForceSelect,
     /// The board: deployment and the turn loop.

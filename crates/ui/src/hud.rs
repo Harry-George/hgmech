@@ -4,12 +4,17 @@ use leptos::prelude::*;
 
 use game::state::Phase;
 
+use super::net::use_net;
 use super::{use_game, use_overheat};
 
 #[component]
 pub fn Hud() -> impl IntoView {
     let game = use_game();
     let overheat = use_overheat();
+    let net = use_net();
+
+    // Online, only the active player may drive the turn machine.
+    let my_turn = move || game.with(|g| net.my_turn(g.current_player()));
 
     let phase_name = move || game.with(|g| g.phase.as_str());
     let button_label = move || game.with(|g| g.primary_action_label());
@@ -49,7 +54,13 @@ pub fn Hud() -> impl IntoView {
         })
     };
 
-    let on_advance = move |_| game.update(|g| g.advance());
+    let on_advance = move |_| {
+        if !my_turn() {
+            return;
+        }
+        game.update(|g| g.advance());
+        net.broadcast(game);
+    };
     let game_over = move || game.with(|g| g.winner.is_some());
     let winner_text =
         move || game.with(|g| g.winner.map(|p| format!("Player {p} wins!")).unwrap_or_default());
@@ -110,7 +121,14 @@ pub fn Hud() -> impl IntoView {
                             <Show when=move || !initiative().is_empty()>
                                 <div class="hud__meta">{initiative}</div>
                             </Show>
-                            <button class="btn" on:click=on_advance>{button_label}</button>
+                            <button
+                                class="btn"
+                                prop:disabled=move || !my_turn()
+                                on:click=on_advance
+                            >{button_label}</button>
+                            <Show when=move || net.is_online() && !my_turn()>
+                                <div class="hud__meta">"Opponent's turn — waiting…"</div>
+                            </Show>
                             <Show when=move || game.with(|g| g.phase == Phase::Attack)>
                                 <label class="toggle">
                                     <input

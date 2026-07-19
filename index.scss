@@ -665,3 +665,109 @@ body {
   color: #9aa;
   cursor: not-allowed;
 }
+
+/* ---- Lobby / mode select ------------------------------------------- */
+
+.lobby {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.lobby__card {
+  position: relative;
+  width: 420px;
+  max-width: calc(100vw - 32px);
+  background: #232a31;
+  border: 1px solid #333d46;
+  border-radius: 10px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.5);
+  padding: 28px 26px 20px;
+  text-align: center;
+}
+
+.lobby__card h1 {
+  margin: 0 0 6px;
+  font-size: 26px;
+}
+
+.lobby__modes {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 20px;
+}
+
+.lobby__mode {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  text-align: left;
+  padding: 12px 16px;
+  background: #2c343c;
+  color: #e7e2d3;
+}
+
+.lobby__mode:hover {
+  background: #35404a;
+}
+
+.lobby__mode-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #ffd23f;
+}
+
+.lobby__mode-sub {
+  font-size: 12px;
+  color: #9fb0bd;
+  font-weight: 400;
+}
+
+.lobby__input {
+  width: 100%;
+  background: #1c2228;
+  border: 1px solid #3c4a54;
+  border-radius: 5px;
+  color: #e7e2d3;
+  padding: 10px 12px;
+  font-size: 15px;
+  margin: 14px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.lobby__room {
+  margin: 14px 0 6px;
+  padding: 12px;
+  background: #1c2228;
+  border: 1px dashed #3c4a54;
+  border-radius: 6px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffd23f;
+  word-break: break-all;
+  user-select: all;
+  font-variant-numeric: tabular-nums;
+}
+
+.lobby__status {
+  color: #9fb0bd;
+  font-size: 14px;
+  margin: 12px 0;
+}
+
+.lobby__back {
+  margin-top: 14px;
+  border: none;
+  background: transparent;
+  color: #8794a0;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.lobby__back:hover {
+  color: #e7e2d3;
+}

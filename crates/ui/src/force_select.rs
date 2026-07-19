@@ -12,6 +12,7 @@ use game::state::{GameState, DEPLOY_DEPTH};
 use game::unit::UnitCard as UnitCardData;
 use game::unit::UnitState;
 
+use super::net::use_net;
 use super::{use_catalog, use_forces, use_game, use_screen, Forces, Pick, ScreenKind};
 
 /// Weight-class options for the size filter dropdown.
@@ -59,6 +60,7 @@ pub fn ForceSelect() -> impl IntoView {
     let forces = use_forces();
     let game = use_game();
     let screen = use_screen();
+    let net = use_net();
 
     let search = RwSignal::new(String::new());
     let role_filter = RwSignal::new(String::new());
@@ -213,6 +215,10 @@ pub fn ForceSelect() -> impl IntoView {
         let seed = (js_sys::Math::random() * u64::MAX as f64) as u64;
         let new_game = forces.with(|f| build_game(f, seed));
         game.set(new_game);
+        // Online, the host builds the match; ship the opening snapshot so the
+        // joiner enters the battle with the same units, terrain, and deployment
+        // order. A no-op in Local play.
+        net.broadcast(game);
         screen.set(ScreenKind::Battle);
     };
 
@@ -223,6 +229,11 @@ pub fn ForceSelect() -> impl IntoView {
                 <p class="hint">
                     "Both players pick BattleMechs from the master list — no point limit, just build what you like. Set each pilot's skill, then start the battle to deploy."
                 </p>
+                <Show when=move || net.is_online()>
+                    <p class="hint">
+                        "Online game: you are the host (Player 0). Build both forces here — your opponent joins as Player 1 and battles once you start."
+                    </p>
+                </Show>
             </div>
 
             <div class="fs__rosters">

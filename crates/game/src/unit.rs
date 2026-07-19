@@ -45,7 +45,7 @@ impl Size {
 /// How a unit moved this turn, in the rules' terms (rules.md §4 "Movement
 /// Modes"). Free-drag movement only ever produces `Stationary` or `Ground`;
 /// `Jump` is reachable through the domain API.
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum MovementMode {
     /// Moved less than 1" (a "Standstill").
     Stationary,
@@ -67,7 +67,7 @@ impl MovementMode {
 
 /// A straight segment of a unit's movement path. Distances are in board
 /// "inches" (which map 1:1 to on-screen pixels in the UI).
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct Line {
     pub start: (f64, f64),
     pub end: (f64, f64),
@@ -156,7 +156,7 @@ pub struct UnitCard {
 }
 
 /// The mutable, in-game state of a single unit on the board.
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Serialize, Deserialize)]
 pub struct UnitState {
     pub id: usize,
     pub player: usize,

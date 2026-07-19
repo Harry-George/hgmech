@@ -15,12 +15,13 @@ use crate::line_of_sight::line_of_sight;
 use crate::scenario::{BOARD_H, BOARD_W};
 use crate::terrain::TerrainFeature;
 use crate::unit::UnitState;
+use serde::{Deserialize, Serialize};
 
 /// Depth of a home-edge deployment zone, in inches (rules.md §3: on-board start
 /// is within 10" of the home edge).
 pub const DEPLOY_DEPTH: f64 = 10.0;
 
-#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Phase {
     /// Pre-game: players alternately place their units in their home-edge zone.
     Deployment,
@@ -46,6 +47,11 @@ impl Phase {
 /// real PRNG while tests inject deterministic rolls; keeping `D` concrete (not a
 /// boxed trait object) also leaves `GameState` `Send + Sync`, which the default
 /// Leptos signal storage requires.
+///
+/// It derives `Serialize`/`Deserialize` (when the dice source does) so the whole
+/// game — units, terrain, log, and PRNG position — can be snapshotted to JSON and
+/// shipped to a peer for multiplayer sync.
+#[derive(Serialize, Deserialize)]
 pub struct GameState<D: Dice> {
     pub turn: usize,
     pub phase: Phase,
