@@ -25,3 +25,4 @@ tokio-stream = "0.1"
 
 [dev-dependencies]
 tokio-tungstenite = "0.28"
+tower = { version = "0.5", features = ["util"] }

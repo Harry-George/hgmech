@@ -4,20 +4,19 @@ use matchbox_signaling::{
     SignalingError, SignalingState,
     common_logic::{self, StateObj},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::{HashMap, HashSet},
     net::SocketAddr,
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-#[derive(Debug, Deserialize, Default, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Serialize, Deserialize, Default, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RoomId(pub String);
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) struct RequestedRoom {
     pub id: RoomId,
-    pub next: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,7 +32,7 @@ pub(crate) struct ServerState {
     clients_in_queue: StateObj<HashMap<PeerId, RequestedRoom>>,
     clients: StateObj<HashMap<PeerId, Peer>>,
     rooms: StateObj<HashMap<RequestedRoom, HashSet<PeerId>>>,
-    matched_by_next: StateObj<HashSet<Vec<PeerId>>>,
+    created_rooms: StateObj<HashSet<RoomId>>,
 }
 impl SignalingState for ServerState {}
 
@@ -75,46 +74,23 @@ impl ServerState {
         let peers = rooms.entry(room.clone()).or_default();
         let prev_peers = peers.iter().cloned().collect();
 
-        match room.next {
-            None => {
-                peers.insert(peer_id);
-            }
-            Some(num_players) => {
-                if peers.len() == num_players - 1 {
-                    let mut matched_by_next = self.matched_by_next.lock().unwrap();
-                    let mut updated_peers = peers.clone();
-                    updated_peers.insert(peer_id);
-                    matched_by_next.insert(updated_peers.into_iter().collect());
-
-                    peers.clear(); // room is complete
-                } else {
-                    peers.insert(peer_id);
-                }
-            }
-        };
+        peers.insert(peer_id);
 
         prev_peers
     }
 
-    pub fn remove_matched_peer(&mut self, peer: PeerId) -> Vec<PeerId> {
-        let mut matched_by_next = self.matched_by_next.lock().unwrap();
-        let mut peers = vec![];
-        matched_by_next.retain(|group| {
-            if group.contains(&peer) {
-                peers = group.clone();
-                return false;
-            }
+    pub fn create_room(&self) -> RoomId {
+        let id = RoomId(uuid::Uuid::new_v4().to_string());
+        self.created_rooms.lock().unwrap().insert(id.clone());
+        id
+    }
 
-            true
-        });
+    pub fn room_exists(&self, id: &RoomId) -> bool {
+        self.created_rooms.lock().unwrap().contains(id)
+    }
 
-        peers.retain(|p| p != &peer);
-
-        if !peers.is_empty() {
-            matched_by_next.insert(peers.clone());
-        }
-
-        peers
+    pub fn get_rooms(&self) -> Vec<RoomId> {
+        self.created_rooms.lock().unwrap().iter().cloned().collect()
     }
 
     /// Get a peer

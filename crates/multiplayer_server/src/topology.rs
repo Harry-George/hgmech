@@ -104,22 +104,10 @@ impl SignalingTopology<NoCallbacks, ServerState> for MatchmakingDemoTopology {
                     .into(),
             );
 
-            //Check if the peer was matched by next?
-            let matcheds = state.remove_matched_peer(peer_id);
-            if !matcheds.is_empty() {
-                //Those where matched by next?
-                for matched in matcheds {
-                    match state.try_send(matched, event.clone()) {
-                        Ok(()) => info!("Sent peer remove to: {:?}", peer_id),
-                        Err(e) => error!("Failure sending peer remove: {e:?}"),
-                    }
-                }
-            } else {
-                for peer_id in other_peers {
-                    match state.try_send(peer_id, event.clone()) {
-                        Ok(()) => info!("Sent peer remove to: {:?}", peer_id),
-                        Err(e) => error!("Failure sending peer remove: {e:?}"),
-                    }
+            for peer_id in other_peers {
+                match state.try_send(peer_id, event.clone()) {
+                    Ok(()) => info!("Sent peer remove to: {:?}", peer_id),
+                    Err(e) => error!("Failure sending peer remove: {e:?}"),
                 }
             }
         }
@@ -151,11 +139,7 @@ mod tests {
             let mut state = state.clone();
             move |connection| {
                 let room_id = RoomId(connection.path.clone().unwrap_or_default());
-                let next = connection
-                    .query_params
-                    .get("next")
-                    .and_then(|next| next.parse::<usize>().ok());
-                let room = RequestedRoom { id: room_id, next };
+                let room = RequestedRoom { id: room_id };
                 {
                     state.add_waiting_client(connection.origin, room);
                 }
@@ -316,133 +300,40 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn match_pairs() {
+    async fn match_different_id() {
         let mut server = app();
         let addr = server.bind().unwrap();
         tokio::spawn(server.serve());
 
         let (mut client_a, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/room_name?next=2"))
+            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1"))
                 .await
                 .unwrap();
 
         let _a_uuid = get_peer_id(recv_peer_event(&mut client_a).await);
 
         let (mut client_b, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/room_name?next=2"))
-                .await
-                .unwrap();
-
-        let b_uuid = get_peer_id(recv_peer_event(&mut client_b).await);
-
-        let (mut client_c, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/room_name?next=2"))
-                .await
-                .unwrap();
-
-        let _c_uuid = get_peer_id(recv_peer_event(&mut client_c).await);
-
-        let (mut client_d, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/room_name?next=2"))
-                .await
-                .unwrap();
-
-        let d_uuid = get_peer_id(recv_peer_event(&mut client_d).await);
-
-        // Clients should be matched in pairs as they arrive, i.e. a + b and c + d
-        let new_peer_b = recv_peer_event(&mut client_a).await;
-        let new_peer_d = recv_peer_event(&mut client_c).await;
-
-        assert_eq!(new_peer_b, JsonPeerEvent::NewPeer(b_uuid));
-        assert_eq!(new_peer_d, JsonPeerEvent::NewPeer(d_uuid));
-
-        let timeout = time::sleep(Duration::from_millis(100));
-        pin_mut!(timeout);
-        select! {
-            _ = client_a.next() => panic!("unexpected message"),
-            _ = client_b.next() => panic!("unexpected message"),
-            _ = client_c.next() => panic!("unexpected message"),
-            _ = client_d.next() => panic!("unexpected message"),
-            _ = &mut timeout => {}
-        }
-    }
-    #[tokio::test]
-    async fn match_pair_and_other_alone_room_without_next() {
-        let mut server = app();
-        let addr = server.bind().unwrap();
-        tokio::spawn(server.serve());
-
-        let (mut client_a, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/room_name?next=2"))
-                .await
-                .unwrap();
-
-        let _a_uuid = get_peer_id(recv_peer_event(&mut client_a).await);
-
-        let (mut client_b, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/room_name"))
+            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_2"))
                 .await
                 .unwrap();
 
         let _b_uuid = get_peer_id(recv_peer_event(&mut client_b).await);
 
         let (mut client_c, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/room_name?next=2"))
-                .await
-                .unwrap();
-
-        let c_uuid = get_peer_id(recv_peer_event(&mut client_c).await);
-
-        // Clients should be matched in pairs as they arrive, i.e. a + b and c + d
-        let new_peer_c = recv_peer_event(&mut client_a).await;
-
-        assert_eq!(new_peer_c, JsonPeerEvent::NewPeer(c_uuid));
-
-        let timeout = time::sleep(Duration::from_millis(100));
-        pin_mut!(timeout);
-        select! {
-            _ = client_a.next() => panic!("unexpected message"),
-            _ = client_b.next() => panic!("unexpected message"),
-            _ = client_c.next() => panic!("unexpected message"),
-            _ = &mut timeout => {}
-        }
-    }
-
-    #[tokio::test]
-    async fn match_different_id_same_next() {
-        let mut server = app();
-        let addr = server.bind().unwrap();
-        tokio::spawn(server.serve());
-
-        let (mut client_a, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1?next=2"))
-                .await
-                .unwrap();
-
-        let _a_uuid = get_peer_id(recv_peer_event(&mut client_a).await);
-
-        let (mut client_b, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_2?next=2"))
-                .await
-                .unwrap();
-
-        let _b_uuid = get_peer_id(recv_peer_event(&mut client_b).await);
-
-        let (mut client_c, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1?next=2"))
+            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1"))
                 .await
                 .unwrap();
 
         let c_uuid = get_peer_id(recv_peer_event(&mut client_c).await);
 
         let (mut client_d, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_2?next=2"))
+            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_2"))
                 .await
                 .unwrap();
 
         let d_uuid = get_peer_id(recv_peer_event(&mut client_d).await);
 
-        // Clients should be matched in pairs as they arrive, i.e. a + c and b + d
+        // Clients should be matched by room id
         let new_peer_c = recv_peer_event(&mut client_a).await;
         let new_peer_d = recv_peer_event(&mut client_b).await;
 
@@ -456,70 +347,6 @@ mod tests {
             _ = client_b.next() => panic!("unexpected message"),
             _ = client_c.next() => panic!("unexpected message"),
             _ = client_d.next() => panic!("unexpected message"),
-            _ = &mut timeout => {}
-        }
-    }
-    #[tokio::test]
-    async fn match_same_id_different_next() {
-        let mut server = app();
-        let addr = server.bind().unwrap();
-        tokio::spawn(server.serve());
-
-        let (mut client_a, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1?next=2"))
-                .await
-                .unwrap();
-
-        let _a_uuid = get_peer_id(recv_peer_event(&mut client_a).await);
-
-        let (mut client_b, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1?next=3"))
-                .await
-                .unwrap();
-
-        let _b_uuid = get_peer_id(recv_peer_event(&mut client_b).await);
-
-        let (mut client_c, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1?next=2"))
-                .await
-                .unwrap();
-
-        let c_uuid = get_peer_id(recv_peer_event(&mut client_c).await);
-
-        let (mut client_d, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1?next=3"))
-                .await
-                .unwrap();
-
-        let d_uuid = get_peer_id(recv_peer_event(&mut client_d).await);
-
-        let (mut client_e, _response) =
-            tokio_tungstenite::connect_async(format!("ws://{addr}/scope_1?next=3"))
-                .await
-                .unwrap();
-
-        let e_uuid = get_peer_id(recv_peer_event(&mut client_e).await);
-
-        // Clients should be matched in pairs as they arrive, i.e. a + c and (b + d ; b + e ; d + e)
-        let new_peer_c = recv_peer_event(&mut client_a).await;
-        let new_peer_d = recv_peer_event(&mut client_b).await;
-        let new_peer_e = recv_peer_event(&mut client_b).await;
-        assert_eq!(new_peer_e, JsonPeerEvent::NewPeer(e_uuid));
-        let new_peer_e = recv_peer_event(&mut client_d).await;
-
-        assert_eq!(new_peer_c, JsonPeerEvent::NewPeer(c_uuid));
-        assert_eq!(new_peer_d, JsonPeerEvent::NewPeer(d_uuid));
-        assert_eq!(new_peer_d, JsonPeerEvent::NewPeer(d_uuid));
-        assert_eq!(new_peer_e, JsonPeerEvent::NewPeer(e_uuid));
-
-        let timeout = time::sleep(Duration::from_millis(100));
-        pin_mut!(timeout);
-        select! {
-            _ = client_a.next() => panic!("unexpected message"),
-            _ = client_b.next() => panic!("unexpected message"),
-            _ = client_c.next() => panic!("unexpected message"),
-            _ = client_d.next() => panic!("unexpected message"),
-            _ = client_e.next() => panic!("unexpected message"),
             _ = &mut timeout => {}
         }
     }
