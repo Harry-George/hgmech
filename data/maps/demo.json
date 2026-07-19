@@ -1,0 +1,13 @@
+{
+  "name": "Demo Skirmish",
+  "terrain": [
+    { "kind": "Woods", "label": "Woods", "x": 24.0, "y": 6.0, "w": 12.0, "h": 14.0 },
+    { "kind": "Cover", "label": "Rubble", "x": 26.0, "y": 30.0, "w": 10.0, "h": 10.0 }
+  ],
+  "units": [
+    { "mech": "atlas", "player": 0, "color": "FF0000", "position": [8.0, 14.0], "pilot_skill": 4 },
+    { "mech": "griffin", "player": 0, "color": "00B050", "position": [8.0, 34.0], "pilot_skill": 4 },
+    { "mech": "wolfhound", "player": 1, "color": "0070C0", "position": [52.0, 14.0], "pilot_skill": 3 },
+    { "mech": "phoenix_hawk", "player": 1, "color": "B000B0", "position": [52.0, 34.0], "pilot_skill": 3 }
+  ]
+}

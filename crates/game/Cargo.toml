@@ -1,0 +1,21 @@
+[package]
+name = "game"
+version = "0.1.0"
+edition = "2021"
+description = "Pure Alpha Strike game logic (no Leptos / web-sys / DOM)."
+license = "MIT OR Apache-2.0"
+
+# Pure logic — no Leptos / web-sys / DOM. serde/serde_json load the embedded
+# mech/map data under `data/`; miniz_oxide (pure-Rust DEFLATE, WASM-safe)
+# inflates the compressed unit catalog baked in by `build.rs`. All build on the
+# host target so `cargo test -p game` still runs everywhere.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+miniz_oxide = "0.8"
+
+# The build script parses the master CSV and compresses the result; it reuses
+# the crate's own CSV parser (`src/catalog_csv.rs`) via `include!`.
+[build-dependencies]
+serde_json = "1"
+miniz_oxide = "0.8"

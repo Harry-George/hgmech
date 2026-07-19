@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  # Allow manual runs from the Actions tab.
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+# Least privilege by default; the deploy jobs widen this for themselves.
+permissions:
+  contents: read
+
+jobs:
+  # Fast verification on every push and PR: lint the workspace for the wasm
+  # target with warnings denied, and run the host-side game tests. This skips
+  # the wasm-bindgen/wasm-opt bundling that `trunk build` would run, so it is
+  # meaningfully faster than a full debug bundle while still gating on warnings.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95"
+          targets: wasm32-unknown-unknown
+          components: clippy
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: verify
+
+      - name: Clippy (warnings denied)
+        run: cargo clippy --workspace --all-targets --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Test game logic
+        run: cargo test -p game
+
+  # Build the production bundle and upload it as a Pages artifact. Only on the
+  # default branch, and only once verification has passed.
+  build:
+    needs: verify
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: "1.95"
+          targets: wasm32-unknown-unknown
+
+      - name: Cache Rust
+        uses: Swatinem/rust-cache@v2
+        with:
+          # Keep the release target dir separate from verify's clippy cache.
+          key: release
+
+      # Trunk downloads wasm-bindgen and wasm-opt into its cache on first build;
+      # cache them so they are not re-fetched on every run.
+      - name: Cache Trunk tools
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/trunk
+          key: trunk-tools-${{ runner.os }}-0.21.14
+
+      # Install Trunk from its prebuilt binary rather than a third-party action,
+      # so the workflow has no dependency on a Node20-based action (the jetli
+      # action has no Node24 release and would break once Node20 is removed).
+      - name: Install Trunk
+        env:
+          TRUNK_VERSION: 0.21.14
+        run: |
+          mkdir -p "$HOME/.local/bin"
+          curl -fsSL "https://github.com/trunk-rs/trunk/releases/download/v${TRUNK_VERSION}/trunk-x86_64-unknown-linux-gnu.tar.gz" \
+            | tar -xz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Pages serves from https://<user>.github.io/<repo>/, so the bundle must
+      # reference its assets under that subpath. `--public-url /<repo>/` rewrites
+      # the absolute asset URLs in index.html accordingly.
+      - name: Build release bundle
+        run: trunk build --release --public-url "/${{ github.event.repository.name }}/"
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    # Let a newer deploy cancel an in-progress one, but never interrupt a run
+    # that is already live-deploying.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v5

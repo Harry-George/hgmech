@@ -1,0 +1,205 @@
+NOT TESTED — rules in rules.md with no corresponding test in this directory
+===========================================================================
+
+This file is the companion to the integration tests in crates/game/tests. Those
+tests aim to cover *every* mechanical rule in rules.md. Each rule listed below is
+NOT covered by a test, together with the reason. Reasons fall into three buckets:
+
+  [FLAVOR]      Descriptive / force-building / fiction text with no mechanical
+                effect to assert.
+  [NOT-MODELED] A genuine game mechanic that the engine (crates/game) does not
+                implement, so there is nothing to test. These are the engine's
+                documented out-of-scope areas (facing/LOS geometry, physical
+                attacks, terrain movement cost, water depth, the HT ability,
+                formations/SPAs) plus a few smaller gaps noted below.
+  [DIVERGES]    The engine deliberately implements the rule differently from the
+                book; a faithful test would fail. Called out so the divergence is
+                a known, documented choice rather than a silent gap.
+
+If one of these mechanics is implemented later, move the rule out of this file
+and add a real test for it.
+
+---------------------------------------------------------------------------
+§1 The Unit Card
+---------------------------------------------------------------------------
+- Field glossary (Name, TP, PV, Role, Heat Scale layout, Critical-Hit track):
+  [FLAVOR] data-dictionary text. The mechanically-meaningful fields are tested
+  through their effects:
+    * TMM .......... combat_modifiers.rs (target movement modifiers)
+    * SZ ........... unit_card.rs (Size weight classes 1-4)
+    * Skill ........ combat_modifiers.rs (base of the to-hit number)
+    * Damage S/M/L . damage_and_crits.rs / combat_modifiers.rs
+    * OV ........... heat_and_overheat.rs
+    * Armor/Struct . damage_and_crits.rs
+    * Specials ..... damage_and_crits.rs (CASE/CASEII/ENE), heat_and_overheat.rs (OVL)
+- "Type (TP) is BM only" at introductory level: [FLAVOR] no other type exists.
+- PV (Point Value) for force balancing: [NOT-MODELED] no force-building logic.
+
+---------------------------------------------------------------------------
+§2 Sequence of Play
+---------------------------------------------------------------------------
+- Initiative ties are re-rolled: [DIVERGES] roll_initiative() breaks ties by
+  player order (stable sort) instead of re-rolling. Tested behavior is "higher
+  total acts last" (turn_structure.rs); the re-roll itself is not implemented.
+- Combat damage "is recorded immediately but does not take effect until the End
+  Phase": [DIVERGES] GameState::attack() applies damage and criticals
+  immediately — there is no deferred-damage buffer. The one consequence of that
+  rule that IS modeled and tested is "a unit destroyed this phase can still
+  return fire": a unit killed this turn stays actionable in the Attack phase
+  until the End Phase removes it (turn_structure.rs
+  a_unit_killed_this_turn_can_still_return_fire, unit.rs destroyed_this_turn).
+- Victory by scenario alternatives (breakthrough, capture, hold-position):
+  [NOT-MODELED] only "destroy all enemy units" is implemented (tested).
+
+---------------------------------------------------------------------------
+§3 Setup
+---------------------------------------------------------------------------
+- Roll for force-list pick order, terrain placement by agreement, home-edge
+  choice, entering/exiting from home edge, off-board start, deployment zone
+  within 10" of the home edge, "any facing": [NOT-MODELED] the engine has no
+  setup/deployment phase or board-edge concept; scenario.rs just hard-places
+  units. None of this is enforced in testable logic.
+
+---------------------------------------------------------------------------
+§4 Movement Phase
+---------------------------------------------------------------------------
+TESTED here: MV-budget ceiling, the always-available 2" minimum, the −2"/heat
+slowdown, Standstill/Ground mode triggers, immobility (movement.rs).
+
+NOT tested:
+- Facing ("feet" direction; changes only in Movement; affects front/rear & arcs):
+  [NOT-MODELED] no facing is stored on a unit.
+- Jumping specifics — shortest path, pick any endpoint within jump MV, land any
+  facing, may jump into water but not out of it, ignores terrain cost & level
+  limits: [NOT-MODELED] Jump is only a MovementMode tag used for to-hit math;
+  there is no jump pathing/terrain interaction.
+- Jumping Move is not reduced by heat: [NOT-MODELED] movement_budget() subtracts
+  the heat slowdown regardless of mode, and there is no separate jump-budget
+  path. (The jumping-TMM half of that rule IS tested in combat_modifiers.rs.)
+- Terrain & Movement Cost table (Clear/Rough/Woods/Water +costs, level change
+  +2"/1", costs combine, 1"-deep water): [NOT-MODELED] movement is free up to the
+  MV budget; per-tile terrain cost is explicitly out of scope.
+- Level changes and the 2"-elevation-per-1"-travel prohibition: [NOT-MODELED]
+  no elevation model.
+- Stacking (pass through friendly, not enemy at same elevation; no two units end
+  in the same space): [NOT-MODELED] no collision/occupancy checks.
+
+---------------------------------------------------------------------------
+§5 Combat Phase — Weapon Attacks
+---------------------------------------------------------------------------
+TESTED here: range brackets & modifiers, the full to-hit summation, armor-then-
+structure damage, the natural-12 crit, structure-damage crit, the crit table and
+crit effects (combat_modifiers.rs, damage_and_crits.rs).
+
+NOT tested:
+- Step 1 Line of Sight — all of it (solid terrain <1/3 visible blocks; woods
+  block at >=6" and otherwise add +1; base-to-base always have LOS; intervening
+  units never block; partial cover between 1/3 and 2/3; water gives partial
+  cover): [NOT-MODELED] there is no LOS geometry. Note: the +1 cover MODIFIER is
+  tested (terrain_modifier), but cover is read from a rectangular zone the target
+  stands in, not computed from a line of sight.
+- Step 2 Firing Arc ("more than half the base outside the arc → no attack"):
+  [NOT-MODELED] no facing/arc geometry.
+- Base-to-base units cannot make weapon attacks (only physical): [NOT-MODELED]
+  the engine allows a weapon attack at distance 0 (it classifies as Short range).
+- Step 6 attack direction front/rear and the +1 damage rear bonus (and the
+  corner-tie "target chooses"): [NOT-MODELED] no facing, so no rear hits.
+- Minimal Damage (0*): roll 1D6, 4+ deals 1, a 0-result cannot trigger crits:
+  [NOT-MODELED] damage values are plain u32; there is no 0* marker. (The plain
+  "0 bracket deals 0 damage" case IS tested in combat_modifiers.rs.)
+- HT#/#/# heat-on-hit at the damage step: [NOT-MODELED] see §10.
+- Step 7 "if a rolled crit does not apply, deal +1 damage instead" (e.g. a Weapon
+  Hit on a unit already at 0 damage): [NOT-MODELED] apply_critical_hit() silently
+  no-ops such crits (e.g. reduced_by_one saturates) without the +1-damage
+  fallback.
+
+---------------------------------------------------------------------------
+§6 Physical Attacks
+---------------------------------------------------------------------------
+- Entire section — Standard (punch/kick = Size), Melee (MEL, Size+1), Charge and
+  DFA (damage formulas, attacker self-damage, the forced DFA crit roll, "one
+  special physical per target", "no weapon + physical same turn", the +1 type
+  modifier, Fire-Control not applying, shutdown giving no movement mod to
+  physicals): [NOT-MODELED] the engine implements no physical attacks at all.
+
+---------------------------------------------------------------------------
+§7 End Phase
+---------------------------------------------------------------------------
+TESTED here: heat resolution, shutdown, restart, per-turn reset (heat_and_
+overheat.rs).
+- "Apply all damage recorded during Combat at the End Phase, then remove
+  destroyed units": [DIVERGES] damage is applied immediately during the Attack
+  phase (see §2). Destroyed-unit removal is modeled as is_destroyed()/winner
+  checks rather than physical removal from the unit list.
+
+---------------------------------------------------------------------------
+§8 Heat & Overheating
+---------------------------------------------------------------------------
+TESTED here: overheat bonus at S/M, no Long bonus without OVL, OVL extends to
+Long, overheat capped by the scale, heat paid at End Phase, cool-to-0 when not
+firing, heat held when firing without overheat, shutdown at heat 4, restart,
+heat→TN, heat→ground-move, heat≥2 → −1 TMM, shutdown −4 target mod, jumping TMM
+heat-immune, engine-hit +1 heat on fire.
+
+NOT tested:
+- Choosing how many overheat points to spend (0…OV): [DIVERGES] resolve_attack()
+  takes a bool and always spends the full OV (capped by the scale). The 0 case
+  and the full-OV case are tested; intermediate point counts are not selectable.
+- Every water-related heat rule — "−1 heat per overheat point used in water",
+  "a unit in water using only 1 overheat: heat unchanged", "entering water ≥2"
+  deep → −1 heat": [NOT-MODELED] water depth / being-in-water is not modeled for
+  heat purposes.
+- HT#/#/# and physical attacks may not be augmented by overheat: [NOT-MODELED]
+  neither HT nor physical attacks exist.
+- "Heat level applies starting the turn AFTER it is marked": partially implicit
+  (heat only changes at the End Phase) but there is no dedicated test asserting
+  the one-turn delay across a full turn cycle.
+
+---------------------------------------------------------------------------
+§8 Heat (HT#/#/#) Special-Ability targeting
+---------------------------------------------------------------------------
+- Adds heat to the target's scale at End Phase on a hit; max 2 heat/target/turn;
+  becomes normal damage if the target has no heat scale: [NOT-MODELED] the HT
+  ability is not implemented (the card has no HT field).
+
+---------------------------------------------------------------------------
+§9 Quick Reference — Attack Modifiers
+---------------------------------------------------------------------------
+- This section restates the modifiers from §5/§8; all of the modeled ones are
+  tested in combat_modifiers.rs. The physical-attack-type rows (+1 Charge/DFA,
+  +0 Standard/Melee; heat & fire-control not applying to physicals) are
+  [NOT-MODELED] (see §6).
+
+---------------------------------------------------------------------------
+§10 Special Abilities
+---------------------------------------------------------------------------
+TESTED: CASE, CASEII, ENE (damage_and_crits.rs), OVL (heat_and_overheat.rs).
+- HT#/#/# (Heat): [NOT-MODELED] see §8.
+- MEL (Melee): [NOT-MODELED] physical attacks not implemented (see §6). The card
+  carries a `mel` flag but nothing consumes it.
+- "If a special ability contradicts a basic rule, the ability wins": [FLAVOR]
+  meta-rule, not directly testable.
+
+---------------------------------------------------------------------------
+§11 Reference: Introductory Units
+---------------------------------------------------------------------------
+- The Stalker STK-3F overheat example IS tested (heat_and_overheat.rs).
+- The unit roster and other example card values (e.g. Rifleman RFL-3N 4 Armor /
+  5 Structure): [FLAVOR] reference data, not engine rules. They would only test
+  that a hand-built card holds the numbers it was given.
+
+---------------------------------------------------------------------------
+§12 Formations & Special Pilot Abilities (SPAs)
+---------------------------------------------------------------------------
+- Lances of 4, losing the formation bonus below 3 survivors, and every SPA
+  (Battle Lance Lucky, Fire Lance Sniper, Cavalry/Striker Speed Demon):
+  [NOT-MODELED] no formation or SPA system exists.
+
+---------------------------------------------------------------------------
+Appendix — Scenario Setups
+---------------------------------------------------------------------------
+- The Green/Veteran/Elite scenario layouts, win conditions, the Factory unit
+  (9 Armor / 1 Structure, shield-on-7+), "Win the Field" / "Salt the Earth":
+  [NOT-MODELED] scenarios beyond the starting 2-v-2 placement are not
+  implemented, and alternative victory conditions are not modeled (see §2).
+
